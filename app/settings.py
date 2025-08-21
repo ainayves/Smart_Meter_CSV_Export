@@ -26,3 +26,8 @@ APP_PORT = int(os.getenv("APP_PORT", "8000"))
 
 # Optionnel : URL publique pour générer des liens absolus
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", f"http://{APP_HOST}:{APP_PORT}")
+
+
+# Source de données
+DATA_SOURCE = os.getenv("DATA_SOURCE", "json")  # <-- JSON par défaut si tu veux
+JSON_FILE = os.getenv("JSON_FILE", str((BASE_DIR / "data" / "data.json").resolve()))

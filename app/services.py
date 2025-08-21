@@ -1,13 +1,14 @@
-import csv
-import os
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from __future__ import annotations
+import csv, os
+from datetime import timezone
 from pathlib import Path
 from typing import Callable
 from sqlalchemy.orm import Session
+from concurrent.futures import ThreadPoolExecutor
 from .models import Job
 from .settings import EXPORT_DIR, MAX_WORKERS
-from .utils import ValidationError, validate_request, generate_smart_meter_data
+from .utils import ValidationError, validate_request
+from .data_provider import get_provider  # <-- on lit via provider (JSON)
 
 
 class JobProcessor:
@@ -37,15 +38,16 @@ def process_job(job_id: str, db_factory: Callable[[], Session]):
         job.touch()
         db.commit()
 
-        # Validate again & generate data
+        # Valide la période + existence du compteur selon la source (JSON)
         start, end = validate_request(
             job.smart_meter_id, job.start_datetime, job.end_datetime
         )
 
-        # Write CSV
+        provider = get_provider()  # <- DATA_SOURCE=json => JSONProvider
         filename = _filename_for(job)
-        filepath = EXPORT_DIR / filename
+        filepath = Path(EXPORT_DIR) / filename
         record_count = 0
+
         with open(filepath, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(
@@ -58,14 +60,14 @@ def process_job(job_id: str, db_factory: Callable[[], Session]):
                     "current_a",
                 ]
             )
-            for ts, smid, e, p, v, c in generate_smart_meter_data(
+
+            # <-- lit uniquement ce qui est présent dans le JSON
+            for ts, smid, e, p, v, c in provider.iter_readings(
                 job.smart_meter_id, start, end
             ):
                 writer.writerow(
                     [
-                        ts.replace(tzinfo=timezone.utc)
-                        .isoformat()
-                        .replace("+00:00", "Z"),
+                        ts.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
                         smid,
                         e,
                         p,
@@ -75,10 +77,9 @@ def process_job(job_id: str, db_factory: Callable[[], Session]):
                 )
                 record_count += 1
 
-        file_size_bytes = os.path.getsize(filepath)
         job.file_path = str(filepath)
         job.record_count = record_count
-        job.file_size_bytes = file_size_bytes
+        job.file_size_bytes = os.path.getsize(filepath)
         job.status = "completed"
         job.touch()
         db.commit()

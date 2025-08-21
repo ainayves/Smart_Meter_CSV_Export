@@ -271,7 +271,7 @@ venv/
 *.msix
 *.msm
 *.msp
-
+exports/
 # Windows shortcuts
 *.lnk
 

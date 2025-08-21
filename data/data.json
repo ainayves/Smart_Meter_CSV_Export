@@ -1,0 +1,14 @@
+{
+  "items": [
+    {"timestamp": "2024-01-01T00:00:00Z", "smart_meter_id": "SM-001", "energy_kwh": 0.50, "power_kw": 2.10, "voltage_v": 230.10, "current_a": 9.13},
+    {"timestamp": "2024-01-01T00:01:00Z", "smart_meter_id": "SM-001", "energy_kwh": 0.52, "power_kw": 2.15, "voltage_v": 230.15, "current_a": 9.34},
+    {"timestamp": "2024-01-01T00:02:00Z", "smart_meter_id": "SM-001", "energy_kwh": 0.54, "power_kw": 2.20, "voltage_v": 230.20, "current_a": 9.56},
+    {"timestamp": "2024-01-01T00:03:00Z", "smart_meter_id": "SM-002", "energy_kwh": 0.56, "power_kw": 2.25, "voltage_v": 230.25, "current_a": 9.77},
+    {"timestamp": "2024-01-01T00:04:00Z", "smart_meter_id": "SM-002", "energy_kwh": 0.58, "power_kw": 2.30, "voltage_v": 230.30, "current_a": 9.99},
+    {"timestamp": "2024-01-01T00:05:00Z", "smart_meter_id": "SM-002", "energy_kwh": 0.60, "power_kw": 2.35, "voltage_v": 230.35, "current_a": 10.20},
+    {"timestamp": "2024-01-01T00:06:00Z", "smart_meter_id": "SM-003", "energy_kwh": 0.62, "power_kw": 2.40, "voltage_v": 230.40, "current_a": 10.42},
+    {"timestamp": "2024-01-01T00:07:00Z", "smart_meter_id": "SM-003", "energy_kwh": 0.64, "power_kw": 2.45, "voltage_v": 230.45, "current_a": 10.63},
+    {"timestamp": "2024-01-01T00:08:00Z", "smart_meter_id": "SM-004", "energy_kwh": 0.66, "power_kw": 2.50, "voltage_v": 230.50, "current_a": 10.85},
+    {"timestamp": "2024-01-01T00:09:00Z", "smart_meter_id": "SM-004", "energy_kwh": 0.68, "power_kw": 2.55, "voltage_v": 230.55, "current_a": 11.06}
+  ]
+}

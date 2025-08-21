@@ -1,9 +1,16 @@
+from __future__ import annotations
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
+import json, os
 from typing import Iterator, Tuple
-from math import sin
 
-
-from .settings import KNOWN_SMART_METERS, MAX_RANGE_DAYS, MIN_RANGE_SECONDS
+from .settings import (
+    KNOWN_SMART_METERS,
+    MAX_RANGE_DAYS,
+    MIN_RANGE_SECONDS,
+    DATA_SOURCE,
+    JSON_FILE,
+)
 
 
 class ValidationError(Exception):
@@ -13,16 +20,50 @@ class ValidationError(Exception):
         self.details = details
 
 
+@lru_cache(maxsize=1)
+def _json_known_meters() -> set[str]:
+    """Construit l’ensemble des smart_meter_id présents dans le fichier JSON."""
+    if not JSON_FILE or not os.path.exists(JSON_FILE):
+        return set()
+    try:
+        with open(JSON_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        items = data.get("items", data if isinstance(data, list) else [])
+        return {
+            str(it.get("smart_meter_id")) for it in items if it.get("smart_meter_id")
+        }
+    except Exception:
+        return set()
+
+
 def validate_request(smart_meter_id: str, start: datetime, end: datetime):
     if not smart_meter_id:
         raise ValidationError("VALIDATION_ERROR", "Smart meter ID is required")
-    if smart_meter_id not in KNOWN_SMART_METERS:
-        raise ValidationError(
-            "SMART_METER_NOT_FOUND",
-            f"Smart meter with ID '{smart_meter_id}' not found",
-            "The specified smart meter does not exist in the system",
-        )
 
+    # 🔒 Validation de l'existence du compteur en fonction de la source
+    if DATA_SOURCE == "json":
+        json_ids = _json_known_meters()
+        if not json_ids:
+            raise ValidationError(
+                "SMART_DATA_SOURCE_EMPTY",
+                "JSON data source is empty or unreadable",
+                f"JSON_FILE={JSON_FILE!r}",
+            )
+        if smart_meter_id not in json_ids:
+            raise ValidationError(
+                "SMART_METER_NOT_FOUND",
+                f"Smart meter '{smart_meter_id}' not found in JSON",
+                f"Available IDs: {sorted(json_ids)}",
+            )
+    else:
+        if smart_meter_id not in KNOWN_SMART_METERS:
+            raise ValidationError(
+                "SMART_METER_NOT_FOUND",
+                f"Smart meter with ID '{smart_meter_id}' not found",
+                "The specified smart meter does not exist in the system",
+            )
+
+    # Normalisation UTC
     if start.tzinfo is None:
         start = start.replace(tzinfo=timezone.utc)
     if end.tzinfo is None:
@@ -45,28 +86,3 @@ def validate_request(smart_meter_id: str, start: datetime, end: datetime):
         raise ValidationError("INVALID_DATE_RANGE", "Maximum date range is 1 year")
 
     return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
-
-
-def generate_smart_meter_data(
-    smart_meter_id: str, start: datetime, end: datetime
-) -> Iterator[Tuple[datetime, str, float, float, float, float]]:
-    """Yield per-minute readings between start (inclusive) and end (exclusive).
-    Values are mock but plausible.
-    """
-    if start.tzinfo is None:
-        start = start.replace(tzinfo=timezone.utc)
-    if end.tzinfo is None:
-        end = end.replace(tzinfo=timezone.utc)
-
-    cursor = start
-    step = timedelta(minutes=1)
-    i = 0
-    while cursor < end:
-        # Synthetic waveform around base values
-        energy_kwh = round(0.4 + 0.2 * (1 + sin(i / 60.0)), 4)
-        power_kw = round(1.8 + 0.8 * (1 + sin(i / 15.0)), 3)
-        voltage_v = round(228.0 + 4.0 * (1 + sin(i / 30.0)), 2)
-        current_a = round(power_kw * 1000 / max(voltage_v, 1e-3), 2)
-        yield (cursor, smart_meter_id, energy_kwh, power_kw, voltage_v, current_a)
-        cursor += step
-        i += 1
