@@ -3,7 +3,7 @@ import time
 from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
-from app.main import app
+from ..app.main import app
 from app.settings import EXPORT_DIR
 
 client = TestClient(app)

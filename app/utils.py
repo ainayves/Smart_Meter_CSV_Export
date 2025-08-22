@@ -46,13 +46,13 @@ def validate_request(smart_meter_id: str, start: datetime, end: datetime):
         if not json_ids:
             raise ValidationError(
                 "SMART_DATA_SOURCE_EMPTY",
-                "JSON data source is empty or unreadable",
+                "data source not available or empty",
                 f"JSON_FILE={JSON_FILE!r}",
             )
         if smart_meter_id not in json_ids:
             raise ValidationError(
                 "SMART_METER_NOT_FOUND",
-                f"Smart meter '{smart_meter_id}' not found in JSON",
+                f"Smart meter '{smart_meter_id}' not found in data",
                 f"Available IDs: {sorted(json_ids)}",
             )
     else:
