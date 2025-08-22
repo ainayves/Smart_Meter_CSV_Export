@@ -3,4 +3,5 @@ uvicorn
 SQLAlchemy
 pydantic
 pytest
+pytest-cov
 httpx

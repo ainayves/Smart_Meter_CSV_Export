@@ -9,3 +9,9 @@ This service provides endpoints to request CSV exports for smart meters, check j
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
+```
+## Launch test & coverage
+
+```bash
+pytest --cov=app --cov-report=html -q
+```
