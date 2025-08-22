@@ -15,3 +15,11 @@ uvicorn app.main:app --reload
 ```bash
 pytest --cov=app --cov-report=html -q
 ```
+
+View coverage here : `root_dir/htmlcov/index.html`
+
+## API docs
+
+```bash
+{HOST_URL}/api/docs
+```

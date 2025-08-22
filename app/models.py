@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 class Job(Base):
     __tablename__ = "jobs"
-    __table_args__ = {"extend_existing": True}  # <-- ajoute ceci
+    __table_args__ = {"extend_existing": True}
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     smart_meter_id: Mapped[str] = mapped_column(String, nullable=False)
