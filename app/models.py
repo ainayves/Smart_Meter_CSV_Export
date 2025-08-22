@@ -1,32 +1,37 @@
-import uuid
-from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Integer, BigInteger, Text
-from sqlalchemy.dialects.sqlite import BLOB
+# app/models.py (extrait)
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import String, DateTime, Integer, BigInteger, Text
 from sqlalchemy.sql import func
 from .database import Base
+from datetime import datetime, timezone
 
 
 class Job(Base):
     __tablename__ = "jobs"
+    __table_args__ = {"extend_existing": True}  # <-- ajoute ceci
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    smart_meter_id = Column(String, nullable=False)
-    start_datetime = Column(DateTime(timezone=True), nullable=False)
-    end_datetime = Column(DateTime(timezone=True), nullable=False)
-    status = Column(String, nullable=False, default="pending")
-    created_at = Column(
-        DateTime(timezone=True), server_default=func.current_timestamp()
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    smart_meter_id: Mapped[str] = mapped_column(String, nullable=False)
+    start_datetime: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
     )
-    updated_at = Column(
+    end_datetime: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.current_timestamp(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.current_timestamp(),
         onupdate=func.current_timestamp(),
+        nullable=False,
     )
-    file_path = Column(String, nullable=True)
-    error_message = Column(Text, nullable=True)
-    record_count = Column(Integer, nullable=True)
-    file_size_bytes = Column(BigInteger, nullable=True)
+    file_path: Mapped[str | None] = mapped_column(String)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    record_count: Mapped[int | None] = mapped_column(Integer)
+    file_size_bytes: Mapped[int | None] = mapped_column(BigInteger)
 
-    # Convenience updater for timestamps
-    def touch(self):
-        self.updated_at = datetime.utcnow()
+    def touch(self) -> None:
+        self.updated_at = datetime.now(timezone.utc)
