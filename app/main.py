@@ -3,6 +3,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 import uuid
+
 from .database import Base, engine, get_db
 from .models import Job
 from .schemas import (
@@ -15,12 +16,10 @@ from .schemas import (
     ExportPeriod,
 )
 from .services import processor, process_job, _filename_for
-from .utils import ValidationError, validate_request
-import uvicorn
-from .settings import EXPORT_DIR, APP_HOST, APP_PORT, PUBLIC_BASE_URL
+from .utils import ValidationError, validate_dates_only
+from .settings import EXPORT_DIR
 
 app = FastAPI(title="Smart Meter CSV Export API")
-
 
 # Create tables on startup
 Base.metadata.create_all(bind=engine)
@@ -28,14 +27,24 @@ Base.metadata.create_all(bind=engine)
 
 @app.post("/api/export/csv", response_model=JobStatusPending, status_code=202)
 def create_export_job(payload: ExportRequest, db: Session = Depends(get_db)):
+    """
+    ⚠️ Validation endpoint limitée aux règles demandées (dates uniquement):
+    - champs requis (gérés par Pydantic)
+    - start dans le passé, end après start
+    - plage min 1 min, max 1 an
+    Toute autre erreur doit être gérée en tâche de fond et remontée via /status.
+    """
     try:
-        start, end = validate_request(
-            payload.smart_meter_id, payload.start_datetime, payload.end_datetime
-        )
+        start, end = validate_dates_only(payload.start_datetime, payload.end_datetime)
     except ValidationError as ve:
+        # On renvoie 400 seulement pour les erreurs de date
         raise HTTPException(
             status_code=400,
-            detail={"code": ve.code, "message": str(ve), "details": ve.details or ""},
+            detail={
+                "code": ve.code,
+                "message": str(ve),
+                "details": ve.details or "",
+            },
         )
 
     job = Job(
@@ -49,7 +58,7 @@ def create_export_job(payload: ExportRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(job)
 
-    # Dispatch background task
+    # Dispatch background task (les autres erreurs seront stockées dans error_message)
     processor.submit(process_job, job.id, lambda: next(get_db()))
 
     return JobStatusPending(
@@ -94,7 +103,6 @@ def get_job_status(job_id: str, db: Session = Depends(get_db)):
             ),
         )
     elif job.status == "failed":
-        # Parse structured error if available
         code = "UNKNOWN"
         message = job.error_message or "Export failed"
         details = ""
@@ -120,7 +128,7 @@ def get_job_status(job_id: str, db: Session = Depends(get_db)):
     else:
         return JobStatusPending(
             job_id=job.id,
-            status="pending" if job.status == "pending" else job.status,
+            status=job.status,
             message="Job is being processed",
             created_at=job.created_at,
             updated_at=job.updated_at,
@@ -145,12 +153,4 @@ def download_export(job_id: str, db: Session = Depends(get_db)):
         )
 
     filename = _filename_for(job)
-    return FileResponse(
-        path=job.file_path,
-        media_type="text/csv",
-        filename=filename,
-    )
-
-
-if __name__ == "__main__":
-    uvicorn.run("app.main:app", host=APP_HOST, port=APP_PORT, reload=True)
+    return FileResponse(path=job.file_path, media_type="text/csv", filename=filename)

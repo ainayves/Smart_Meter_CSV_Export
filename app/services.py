@@ -1,21 +1,26 @@
 from __future__ import annotations
+
 import csv, os
 from datetime import timezone
 from pathlib import Path
 from typing import Callable
+
 from sqlalchemy.orm import Session
-from concurrent.futures import ThreadPoolExecutor
+
 from .models import Job
-from .settings import EXPORT_DIR, MAX_WORKERS
-from .utils import ValidationError, validate_request
-from .data_provider import get_provider  # <-- on lit via provider (JSON)
+from .settings import EXPORT_DIR, DATA_SOURCE, JSON_FILE
+from .data_provider import get_provider
+from .utils import ValidationError, validate_dates_only, json_known_meters
+
+from concurrent.futures import ThreadPoolExecutor
+from .settings import MAX_WORKERS
 
 
 class JobProcessor:
-    def __init__(self):
-        self._executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
+    def __init__(self, max_workers: int = MAX_WORKERS):
+        self._executor = ThreadPoolExecutor(max_workers=max_workers)
 
-    def submit(self, fn: Callable, *args, **kwargs):
+    def submit(self, fn, *args, **kwargs):
         return self._executor.submit(fn, *args, **kwargs)
 
 
@@ -28,6 +33,13 @@ def _filename_for(job: Job) -> str:
     return f"smart_meter_{job.smart_meter_id}_{start_str}_{end_str}.csv"
 
 
+def _fail_job(db: Session, job: Job, code: str, message: str, details: str = ""):
+    job.status = "failed"
+    job.error_message = f"{code}:{message}::{details}"
+    job.touch()
+    db.commit()
+
+
 def process_job(job_id: str, db_factory: Callable[[], Session]):
     db = db_factory()
     try:
@@ -38,12 +50,36 @@ def process_job(job_id: str, db_factory: Callable[[], Session]):
         job.touch()
         db.commit()
 
-        # Valide la période + existence du compteur selon la source (JSON)
-        start, end = validate_request(
-            job.smart_meter_id, job.start_datetime, job.end_datetime
-        )
+        # Sécurité: revalider UNIQUEMENT les dates (mêmes règles que l'endpoint)
+        try:
+            start, end = validate_dates_only(job.start_datetime, job.end_datetime)
+        except ValidationError as ve:
+            _fail_job(db, job, ve.code, str(ve))
+            return
 
-        provider = get_provider()  # <- DATA_SOURCE=json => JSONProvider
+        # Vérifs spécifiques à la source (non bloquantes pour l'endpoint)
+        if DATA_SOURCE == "json":
+            ids = json_known_meters()
+            if not ids:
+                _fail_job(
+                    db,
+                    job,
+                    "SMART_DATA_SOURCE_EMPTY",
+                    "JSON data source is empty or unreadable",
+                    f"JSON_FILE={JSON_FILE!r}",
+                )
+                return
+            if job.smart_meter_id not in ids:
+                _fail_job(
+                    db,
+                    job,
+                    "SMART_METER_NOT_FOUND",
+                    f"Smart meter '{job.smart_meter_id}' not found in JSON",
+                    f"Available IDs: {sorted(ids)}",
+                )
+                return
+
+        provider = get_provider()
         filename = _filename_for(job)
         filepath = Path(EXPORT_DIR) / filename
         record_count = 0
@@ -60,8 +96,6 @@ def process_job(job_id: str, db_factory: Callable[[], Session]):
                     "current_a",
                 ]
             )
-
-            # <-- lit uniquement ce qui est présent dans le JSON
             for ts, smid, e, p, v, c in provider.iter_readings(
                 job.smart_meter_id, start, end
             ):
@@ -84,19 +118,10 @@ def process_job(job_id: str, db_factory: Callable[[], Session]):
         job.touch()
         db.commit()
 
-    except ValidationError as ve:
-        job = db.query(Job).get(job_id)
-        if job:
-            job.status = "failed"
-            job.error_message = f"{ve.code}:{ve}::{ve.details}"
-            job.touch()
-            db.commit()
     except Exception as ex:
+        # Toutes autres erreurs non prévues: stockées et visibles via /status
         job = db.query(Job).get(job_id)
         if job:
-            job.status = "failed"
-            job.error_message = f"UNEXPECTED_ERROR:{ex}"
-            job.touch()
-            db.commit()
+            _fail_job(db, job, "UNEXPECTED_ERROR", str(ex))
     finally:
         db.close()
