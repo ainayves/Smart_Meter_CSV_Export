@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 
 def _purge_modules():
-    """Supprime tous les modules 'app.*' du cache pour un import propre."""
+    """Deletes all ‘app.*’ modules from the cache for a clean import."""
     for name in list(sys.modules):
         if name == "app" or name.startswith("app."):
             sys.modules.pop(name, None)
@@ -18,12 +18,12 @@ def _purge_modules():
 @pytest.fixture()
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     """
-    Démarre l'app avec:
-      - un JSON temporaire (data/mock.json)
-      - un EXPORT_DIR temporaire
-      - une DB SQLite temporaire (app.db dans tmp_path)
+    Start the app with:
+      - a temporary JSON (data/mock.json)
+      - a temporary EXPORT_DIR
+      - a temporary SQLite DB (app.db in tmp_path)
     """
-    # Jeu de données fixe
+
     data = {
         "items": [
             {
@@ -109,7 +109,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
         ]
     }
 
-    # Chemins temporaires
+    # Temporary paths
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     json_file = data_dir / "mock.json"
@@ -119,10 +119,10 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     exports_dir.mkdir(parents=True, exist_ok=True)
     db_file = tmp_path / "app.db"
 
-    # Purge complète avant (ré)imports
+    # Full purge before (re)imports
     _purge_modules()
 
-    # 1) settings: pointe vers nos chemins temporaires
+    # 1) settings: point to our temporary paths
     import app.settings as settings
 
     settings.DATA_SOURCE = "json"
@@ -130,7 +130,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     settings.EXPORT_DIR = exports_dir
     settings.DB_URL = f"sqlite:///{db_file}"
 
-    # 2) database: dispose tout ancien engine et nettoie le MetaData
+    # 2) database: dispose any previous engine and clear MetaData
     import app.database as database
 
     try:
@@ -139,7 +139,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
         pass
     database.Base.metadata.clear()
 
-    # 3) imports frais du reste de la stack (aucun reload nécessaire après purge)
+    # 3) fresh imports for the rest of the stack (no reload needed after purge)
     import app.models as models  # noqa: F401
     import app.utils as utils  # noqa: F401
     import app.data_provider as data_provider  # noqa: F401

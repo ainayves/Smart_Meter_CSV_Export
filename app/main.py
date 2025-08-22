@@ -15,8 +15,8 @@ app = FastAPI(
     openapi_url="/api/openapi.json",  # schéma OpenAPI
 )
 
-# Crée les tables au démarrage
+# Creates tables on startup
 Base.metadata.create_all(bind=engine)
 
-# Monte le routeur /api/export
+# Mount the router /api/export
 app.include_router(export_router)

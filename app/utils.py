@@ -15,8 +15,7 @@ class ValidationError(Exception):
         self.details = details
 
 
-# --- Nouvel objectif: la validation à l'endpoint ne porte QUE sur les dates ---
-# Smart meter ID: requis (géré par Pydantic) mais PAS de vérification d'existence.
+# Validating dates for the /jobs endpoint (and revalidating in the background)
 
 
 def validate_dates_only(start: datetime, end: datetime):
@@ -50,7 +49,7 @@ def validate_dates_only(start: datetime, end: datetime):
     return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
 
 
-# Utilitaires pour le traitement en arrière-plan (pas utilisés par l'endpoint)
+# Utilities for background processing (not used by the endpoint)
 @lru_cache(maxsize=1)
 def json_known_meters() -> set[str]:
     if not JSON_FILE or not os.path.exists(JSON_FILE):

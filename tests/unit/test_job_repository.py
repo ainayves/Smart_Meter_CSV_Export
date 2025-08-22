@@ -9,7 +9,7 @@ import pytest
 
 
 def _purge_modules():
-    """Supprime tous les modules 'app.*' du cache pour forcer un import propre par test."""
+    """Remove all 'app.*' modules from the cache to force a clean import per test."""
     for name in list(sys.modules):
         if name == "app" or name.startswith("app."):
             sys.modules.pop(name, None)
@@ -18,16 +18,16 @@ def _purge_modules():
 @pytest.fixture()
 def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """
-    Prépare une DB SQLite temporaire et retourne (repo, session, models).
-    Chaque test part d'un état DB vierge.
+    Prepare a temporary SQLite DB and return (repo, session, models).
+    Each test starts from a clean DB state.
     """
     _purge_modules()
 
-    # Chemins & env
+    # Paths & env
     db_file = tmp_path / "app.db"
     monkeypatch.setenv(
         "DATA_SOURCE", "json"
-    )  # pas utilisé ici, mais cohérent avec l'app
+    )  # not used here, but consistent with the app
 
     # settings
     import app.settings as settings
@@ -43,10 +43,10 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         pass
     database.Base.metadata.clear()
 
-    # models (déclare Job sur le Base)
+    # models (declare Job on Base)
     import app.models as models
 
-    # Crée les tables
+    # Create tables
     database.Base.metadata.create_all(bind=database.engine)
 
     # session + repo
@@ -69,7 +69,7 @@ def _utc(y, m, d, hh=0, mm=0, ss=0):
 
 
 def _as_utc(dt: datetime) -> datetime:
-    """Normalise un datetime en aware UTC. Si tzinfo manquant (SQLite), on assume UTC."""
+    """Normalize a datetime to UTC-aware. If tzinfo is missing (SQLite), assume UTC."""
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
@@ -90,7 +90,7 @@ def test_create_and_get(repo):
 
     fetched = job_repo.get(job.id)
     assert fetched is not None
-    # ⚠️ SQLite peut renvoyer des datetimes naïfs : on normalise avant de comparer
+    # ⚠️ SQLite can return naive datetimes: normalize before comparing
     assert _as_utc(fetched.start_datetime) == start
     assert _as_utc(fetched.end_datetime) == end
 
@@ -109,7 +109,7 @@ def test_mark_processing_updates_status_and_timestamp(repo):
     assert job.updated_at is not None
     assert (
         job.updated_at != before
-    )  # on ne compare pas le tzinfo ici, juste le changement
+    )  # we don't compare tzinfo here, only that it changed
 
 
 def test_mark_completed_sets_file_info_and_status(repo, tmp_path: Path):
@@ -171,4 +171,4 @@ def test_mark_failed_formats_error_message_without_details(repo):
     assert job.status == "failed"
     assert (
         job.error_message == "UNEXPECTED_ERROR:IO error"
-    )  # sans details => pas de '::'
+    )  # without details => no '::'

@@ -11,7 +11,7 @@ from ..models import Job
 
 
 class JobRepository:
-    """Accès DB pour l'entité Job (CRUD + helpers de statut)."""
+    """DB access for the Job entity (CRUD + status helpers)."""
 
     def __init__(self, db: Session):
         self.db = db

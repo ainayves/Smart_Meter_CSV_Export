@@ -27,12 +27,14 @@ class JobProcessor:
 processor = JobProcessor()
 
 
+# --- Job processing logic (runs in background) ---
 def _filename_for(job: Job) -> str:
     start_str = job.start_datetime.strftime("%Y%m%dT%H%M%SZ")
     end_str = job.end_datetime.strftime("%Y%m%dT%H%M%SZ")
     return f"smart_meter_{job.smart_meter_id}_{start_str}_{end_str}.csv"
 
 
+# --- Internal helpers ---
 def _fail_job(db: Session, job: Job, code: str, message: str, details: str = ""):
     job.status = "failed"
     job.error_message = f"{code}:{message}::{details}"
@@ -40,6 +42,7 @@ def _fail_job(db: Session, job: Job, code: str, message: str, details: str = "")
     db.commit()
 
 
+# --- Main job processing function ---
 def process_job(job_id: str, db_factory: Callable[[], Session]):
     db = db_factory()
     try:
@@ -50,14 +53,14 @@ def process_job(job_id: str, db_factory: Callable[[], Session]):
         job.touch()
         db.commit()
 
-        # Sécurité: revalider UNIQUEMENT les dates (mêmes règles que l'endpoint)
+        # Security: revalidate ONLY the dates (same rules as the endpoint)
         try:
             start, end = validate_dates_only(job.start_datetime, job.end_datetime)
         except ValidationError as ve:
             _fail_job(db, job, ve.code, str(ve))
             return
 
-        # Vérifs spécifiques à la source (non bloquantes pour l'endpoint)
+        # Source-specific checks (non-blocking for the endpoint)
         if DATA_SOURCE == "json":
             ids = json_known_meters()
             if not ids:
@@ -119,7 +122,7 @@ def process_job(job_id: str, db_factory: Callable[[], Session]):
         db.commit()
 
     except Exception as ex:
-        # Toutes autres erreurs non prévues: stockées et visibles via /status
+        # All other unexpected errors: stored and visible via /status
         job = db.query(Job).get(job_id)
         if job:
             _fail_job(db, job, "UNEXPECTED_ERROR", str(ex))

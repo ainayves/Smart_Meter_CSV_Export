@@ -20,14 +20,12 @@ MAX_RANGE_DAYS = 366  # inclusive upper bound ~ 1 year
 MIN_RANGE_SECONDS = 60
 
 
-# --- Nouveaux réglages réseau ---
-APP_HOST = os.getenv("APP_HOST", "127.0.0.1")  # ou "0.0.0.0" en conteneur/VM
+# --- Network settings ---
+APP_HOST = os.getenv("APP_HOST", "127.0.0.1")
 APP_PORT = int(os.getenv("APP_PORT", "8000"))
-
-# Optionnel : URL publique pour générer des liens absolus
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", f"http://{APP_HOST}:{APP_PORT}")
 
 
-# Source de données
+# Data source
 DATA_SOURCE = os.getenv("DATA_SOURCE", "json")  #
 JSON_FILE = os.getenv("JSON_FILE", str((BASE_DIR / "data" / "mock.json").resolve()))
