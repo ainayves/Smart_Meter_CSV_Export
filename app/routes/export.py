@@ -1,7 +1,7 @@
 # app/routes/export.py
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -15,7 +15,6 @@ from ..schemas import (
     FileInfo,
     ExportPeriod,
 )
-from ..settings import EXPORT_DIR
 from ..services import processor, process_job, _filename_for
 from ..utils import ValidationError, validate_dates_only
 from ..repositories.jobs import JobRepository
@@ -27,18 +26,63 @@ def get_job_repository(db: Session = Depends(get_db)) -> JobRepository:
     return JobRepository(db)
 
 
-@router.post("/csv", response_model=JobStatusPending, status_code=202)
+@router.post(
+    "/csv",
+    response_model=JobStatusPending,
+    status_code=202,
+    summary="Create a CSV export job",
+    description=(
+        "Accepts a smart meter export request and enqueues an asynchronous job. "
+        "Only date range validation happens here; all other errors are recorded on the job and exposed via `/status/{job_id}`."
+    ),
+    responses={
+        202: {
+            "description": "Export job created",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "job_id": "4f2c3a3a-2a9c-4a7c-8a3e-2c4f1b59b1e1",
+                        "status": "pending",
+                        "message": "Export job created successfully",
+                        "created_at": "2024-01-01T10:00:00Z",
+                        "updated_at": "2024-01-01T10:00:00Z",
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Invalid date range",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": {
+                            "code": "INVALID_DATE_RANGE",
+                            "message": "end_datetime must be after start_datetime",
+                            "details": "",
+                        }
+                    }
+                }
+            },
+        },
+    },
+)
 def create_export_job(
-    payload: ExportRequest,
+    payload: ExportRequest = Body(
+        ...,
+        examples={
+            "basic": {
+                "summary": "Minimal CSV request",
+                "value": {
+                    "smart_meter_id": "SM-001",
+                    "start_datetime": "2024-01-01T00:00:00Z",
+                    "end_datetime": "2024-01-01T00:02:00Z",
+                    "format": "csv",
+                },
+            }
+        },
+    ),
     repo: JobRepository = Depends(get_job_repository),
 ):
-    """
-    Validation endpoint limitée aux dates :
-    - requis: start/end
-    - start dans le passé, end après start
-    - min 1 minute, max 1 an
-    Toute autre erreur sera traitée en tâche de fond et visible via /status.
-    """
     try:
         start, end = validate_dates_only(payload.start_datetime, payload.end_datetime)
     except ValidationError as ve:
@@ -54,7 +98,6 @@ def create_export_job(
         status="pending",
     )
 
-    # Lance le traitement en arrière-plan (le worker écrira le résultat/erreur dans la DB)
     processor.submit(process_job, job.id, lambda: next(get_db()))
 
     return JobStatusPending(
@@ -72,11 +115,76 @@ def create_export_job(
     | JobStatusCompleted
     | JobStatusFailed
     | NotFoundResponse,
+    summary="Get export job status",
+    description=(
+        "Returns the current status of a job. Pending/processing jobs show timestamps only; "
+        "completed jobs include download info; failed jobs include a structured error."
+    ),
+    responses={
+        200: {
+            "description": "Job status (one of pending/completed/failed)",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "pending": {
+                            "summary": "Pending",
+                            "value": {
+                                "job_id": "4f2c3a3a-2a9c-4a7c-8a3e-2c4f1b59b1e1",
+                                "status": "pending",
+                                "message": "Job is being processed",
+                                "created_at": "2024-01-01T10:00:00Z",
+                                "updated_at": "2024-01-01T10:00:00Z",
+                            },
+                        },
+                        "completed": {
+                            "summary": "Completed",
+                            "value": {
+                                "job_id": "4f2c3a3a-2a9c-4a7c-8a3e-2c4f1b59b1e1",
+                                "status": "completed",
+                                "message": "Export completed successfully",
+                                "created_at": "2024-01-01T10:00:00Z",
+                                "updated_at": "2024-01-01T10:05:30Z",
+                                "file_info": {
+                                    "filename": "smart_meter_SM-001_20240101T000000Z_20240101T000200Z.csv",
+                                    "download_url": "/api/export/download/4f2c3a3a-2a9c-4a7c-8a3e-2c4f1b59b1e1",
+                                    "file_size_bytes": 1024,
+                                    "record_count": 2,
+                                    "export_period": {
+                                        "start": "2024-01-01T00:00:00Z",
+                                        "end": "2024-01-01T00:02:00Z",
+                                    },
+                                },
+                            },
+                        },
+                        "failed": {
+                            "summary": "Failed",
+                            "value": {
+                                "job_id": "4f2c3a3a-2a9c-4a7c-8a3e-2c4f1b59b1e1",
+                                "status": "failed",
+                                "message": "Export failed",
+                                "created_at": "2024-01-01T10:00:00Z",
+                                "updated_at": "2024-01-01T10:01:15Z",
+                                "error": {
+                                    "code": "SMART_METER_NOT_FOUND",
+                                    "message": "Smart meter with ID 'SM-999' not found",
+                                    "details": "The specified smart meter does not exist in the system",
+                                },
+                            },
+                        },
+                        "not_found": {
+                            "summary": "Not found",
+                            "value": {
+                                "status": "not_found",
+                                "message": "Job with ID '00000000-0000-0000-0000-000000000000' not found",
+                            },
+                        },
+                    }
+                }
+            },
+        }
+    },
 )
-def get_job_status(
-    job_id: str,
-    repo: JobRepository = Depends(get_job_repository),
-):
+def get_job_status(job_id: str, repo: JobRepository = Depends(get_job_repository)):
     job = repo.get(job_id)
     if not job:
         return NotFoundResponse(
@@ -103,7 +211,6 @@ def get_job_status(
         )
 
     if job.status == "failed":
-        # Parse du champ error_message pour renvoyer la structure demandée
         code = "UNKNOWN"
         message = job.error_message or "Export failed"
         details = ""
@@ -127,7 +234,6 @@ def get_job_status(
             error={"code": code, "message": message, "details": details},
         )
 
-    # pending / processing
     return JobStatusPending(
         job_id=job.id,
         status=job.status,
@@ -137,11 +243,54 @@ def get_job_status(
     )
 
 
-@router.get("/download/{job_id}")
-def download_export(
-    job_id: str,
-    repo: JobRepository = Depends(get_job_repository),
-):
+@router.get(
+    "/download/{job_id}",
+    summary="Download the generated CSV",
+    description="Returns the CSV file for a completed job.",
+    responses={
+        200: {
+            "description": "CSV file",
+            "content": {
+                "text/csv": {
+                    "schema": {"type": "string", "format": "binary"},
+                    "examples": {
+                        "tiny": {
+                            "summary": "2-row CSV preview",
+                            "value": (
+                                "timestamp,smart_meter_id,energy_kwh,power_kw,voltage_v,current_a\n"
+                                "2024-01-01T00:00:00Z,SM-001,0.50,2.10,230.10,9.13\n"
+                                "2024-01-01T00:01:00Z,SM-001,0.52,2.15,230.15,9.34\n"
+                            ),
+                        }
+                    },
+                }
+            },
+        },
+        400: {
+            "description": "File not ready",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "pending",
+                        "message": "File not ready for download",
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Job not found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "not_found",
+                        "message": "Job with ID '...' not found",
+                    }
+                }
+            },
+        },
+    },
+)
+def download_export(job_id: str, repo: JobRepository = Depends(get_job_repository)):
     job = repo.get(job_id)
     if not job:
         raise HTTPException(
