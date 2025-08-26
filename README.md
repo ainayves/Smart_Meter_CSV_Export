@@ -36,5 +36,7 @@ View coverage here : `root_dir/htmlcov/index.html`
 ## API docs
 
 ```bash
-{HOST_URL:PORT}/api/docs
+http://{HOST_URL:PORT}/api/docs
+http://{HOST_URL:PORT}/api/redoc
+
 ```
