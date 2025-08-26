@@ -7,17 +7,21 @@ This service provides endpoints to request CSV exports for smart meters, check j
 
 ```bash
 
-#For linux and Mac
+#Venv for linux and Mac
 python -m venv .venv && source .venv/bin/activate 
 
-#For Windows
+#Venv for Windows
 
 python -m venv venv
 .\venv\Scripts\activate
  
-
+# Install requirements
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+
+# Copy app/.env.example and change app/.env according to your needs
+
+# Then, launch 
+python -m app.main
 
 Serve on a shown HOST_URL:PORT
 ```

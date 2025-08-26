@@ -1,6 +1,8 @@
 from pathlib import Path
+from dotenv import load_dotenv
 import os
 
+load_dotenv(override=True)  # take environment variables from .env.
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_URL = f"sqlite:///{BASE_DIR / 'app.db'}"
 EXPORT_DIR = BASE_DIR / "exports"
